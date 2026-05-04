@@ -1,24 +1,45 @@
 # Autonomous Retail OS
 
-Autonomous Retail OS is a professional control plane for camera-assisted, UPI-first, autonomous retail stores in India.
+Autonomous Retail OS is a fully AI-managed control plane for camera-assisted, UPI-first retail stores in India. Powered by Google Gemini, the AI agents run the entire store — cart management, inventory, replenishment, pricing, security, and customer service — with zero human intervention.
 
-The first implementation focuses on the software brain:
+## AI Architecture
 
-- Store onboarding
-- Product catalog
-- Customer sessions
-- Camera/edge event ingestion
-- Autonomous cart creation
-- UPI checkout URI generation
-- Payment confirmation simulation
-- Inventory update
-- Agent decisions for cart, inventory, replenishment, pricing, and security
+```
+Camera/Edge Events → AgentOrchestrator
+                        ↓
+    ┌───────────────────┼───────────────────┐
+    ↓                   ↓                   ↓
+VisionCheckout    SecurityAgent       InventoryAgent
+(cart updates)    (theft detection)   (low-stock alerts)
+                        ↓                   ↓
+                ReplenishmentAgent    PricingAgent
+                (auto purchase orders)(dynamic discounts)
+                        ↓
+                CustomerAgent
+                (in-store chat)
+```
 
-## Vision
+Each agent receives the full store context (products, stock, cart, session, sales) and uses Gemini to reason about what action to take. Every decision is recorded with the AI's reasoning and confidence score for full auditability.
 
-Build an India-scale autonomous supermarket/kirana/mini-market platform that can run with minimal human intervention using cameras, sensors, UPI payments, edge AI, and autonomous agents.
+## Setup
 
-## Run Locally
+### 1. Get a Gemini API Key (Free)
+
+Go to [Google AI Studio](https://aistudio.google.com) and click "Get API Key". The free tier is generous and sufficient for running a store.
+
+### 2. Configure Environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set your key:
+
+```env
+GEMINI_API_KEY=your_actual_key_here
+```
+
+### 3. Install & Run
 
 ```bash
 python -m venv .venv
@@ -52,14 +73,24 @@ python scripts/demo_flow.py
 7. Confirm payment: `POST /checkout/{sale_id}/confirm-payment`
 8. Review agent decisions: `GET /agents/decisions/{store_id}`
 
-## Current Agent Set
+## AI Agents
 
-- Vision Checkout Agent
-- Security Agent
-- Inventory Agent
-- Replenishment Agent
-- Pricing Agent
+| Agent | Role | Triggers |
+|---|---|---|
+| VisionCheckoutAgent | Applies item_picked/item_returned events to cart | `item_picked`, `item_returned` |
+| SecurityAgent | Detects customers exiting without payment | `customer_exited` |
+| InventoryAgent | Alerts when products drop below threshold | `payment_confirmed`, `stock_adjusted` |
+| ReplenishmentAgent | Auto-drafts purchase orders for low stock | `payment_confirmed`, `stock_adjusted` |
+| PricingAgent | Suggests discounts on excess perishable stock | `stock_adjusted`, `customer_exited` |
+| CustomerAgent | Handles in-store customer chat | Any customer message |
 
-## GitHub Secret Safety
+All agents operate fully autonomously — every decision is executed immediately with `autonomous=true`.
 
-Never paste GitHub tokens or payment credentials into chat, code, docs, or commits. If a token was shared, revoke it immediately and use `gh auth login` or your local credential manager.
+## Configuration
+
+| Env Variable | Default | Description |
+|---|---|---|
+| `GEMINI_API_KEY` | — | Your Google Gemini API key (required) |
+| `GEMINI_MODEL` | `gemini-2.0-flash` | Gemini model to use |
+| `DATABASE_URL` | `sqlite:///./retail_os.db` | Database connection string |
+| `DEFAULT_UPI_PAYEE_VPA` | `merchant@upi` | Default UPI VPA for payments |
