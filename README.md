@@ -94,3 +94,9 @@ All agents operate fully autonomously — every decision is executed immediately
 | `GEMINI_MODEL` | `gemini-2.0-flash` | Gemini model to use |
 | `DATABASE_URL` | `sqlite:///./retail_os.db` | Database connection string |
 | `DEFAULT_UPI_PAYEE_VPA` | `merchant@upi` | Default UPI VPA for payments |
+
+## Physical Deployment
+
+For hardware, cameras, sensors, store layout, wiring diagrams, and Raspberry Pi setup — see the full guide:
+
+→ **[Physical Implementation Guide](docs/PHYSICAL_SETUP.md)**
