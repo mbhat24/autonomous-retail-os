@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     )
     auto_reorder_max_amount: float = Field(default=5000.0, alias="AUTO_REORDER_MAX_AMOUNT")
     auto_price_change_max_percent: float = Field(default=10.0, alias="AUTO_PRICE_CHANGE_MAX_PERCENT")
+    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_MODEL")
+    ai_confidence_threshold: float = Field(default=0.7, alias="AI_CONFIDENCE_THRESHOLD")
 
 
 def get_settings() -> Settings:

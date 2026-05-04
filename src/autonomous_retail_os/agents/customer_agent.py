@@ -1,6 +1,13 @@
+import json
+import logging
+
+import google.generativeai as genai
 from sqlalchemy.orm import Session
 
+from autonomous_retail_os.config import get_settings
 from autonomous_retail_os.services.customer_service import CustomerService
+
+logger = logging.getLogger(__name__)
 
 
 class CustomerAgent:
@@ -8,6 +15,24 @@ class CustomerAgent:
 
     def __init__(self, db: Session) -> None:
         self.service = CustomerService(db)
+        settings = get_settings()
+        if not settings.gemini_api_key:
+            raise RuntimeError("GEMINI_API_KEY is not set in environment or .env file")
+        genai.configure(api_key=settings.gemini_api_key)
+        self._model = genai.GenerativeModel(
+            model_name=settings.gemini_model,
+            system_instruction=(
+                "You are a friendly, helpful customer service agent for an autonomous retail store in India. "
+                "You help customers find products, check their cart, explain UPI payments, and share receipts. "
+                "Respond in a warm, conversational tone. Keep responses concise.\n\n"
+                "Return a JSON object with:\n"
+                '  - reply: string (your response to the customer)\n'
+                '  - suggested_actions: array of strings (2-3 relevant next actions)\n\n'
+                "Suggested action options: checkout, continue_shopping, open_upi_app, show_qr, "
+                "call_support, send_whatsapp_receipt, download_invoice, add_to_cart, ask_location, "
+                "find_product, show_cart"
+            ),
+        )
 
     def reply(
         self,
@@ -26,65 +51,47 @@ class CustomerAgent:
             channel=channel,
             message=message,
         )
-        normalized = message.lower().strip()
-        suggested_actions: list[str] = []
-        if any(word in normalized for word in ["cart", "bill", "total", "amount"]):
-            reply = self._cart_reply(session_id)
-            suggested_actions = ["checkout", "continue_shopping"]
-        elif any(word in normalized for word in ["pay", "upi", "payment", "qr"]):
-            reply = self._payment_reply(session_id)
-            suggested_actions = ["open_upi_app", "show_qr", "call_support"]
-        elif any(word in normalized for word in ["receipt", "invoice"]):
-            reply = self._receipt_reply(session_id)
-            suggested_actions = ["send_whatsapp_receipt", "download_invoice"]
-        elif normalized.startswith("find ") or normalized.startswith("search "):
-            query = normalized.replace("find ", "", 1).replace("search ", "", 1).strip()
-            reply = self._product_reply(store_id, query)
-            suggested_actions = ["add_to_cart", "ask_location"]
-        else:
-            store_name = self.service.store_name(store_id)
-            reply = (
-                f"Welcome to {store_name}. I can help you find products, check your cart, "
-                "generate your bill, explain UPI payment, and share your receipt."
-            )
-            suggested_actions = ["find_product", "show_cart", "checkout"]
+
+        store_name = self.service.store_name(store_id)
+        cart_lines, cart_total = self.service.cart_summary(session_id) if session_id else ([], 0.0)
+        sale = self.service.latest_sale(session_id) if session_id else None
+
+        context = {
+            "store_name": store_name,
+            "session_id": session_id,
+            "cart": {"items": cart_lines, "total": cart_total} if cart_lines else None,
+            "sale": {
+                "id": sale.id,
+                "total": sale.total,
+                "payment_status": sale.payment_status,
+                "upi_payment_uri": sale.upi_payment_uri,
+            } if sale else None,
+        }
+
+        prompt = json.dumps({"customer_message": message, "context": context}, indent=2)
+
+        try:
+            response = self._model.generate_content(prompt)
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                raw = "\n".join(lines[1:]) if len(lines) > 1 else raw
+            if raw.endswith("```"):
+                raw = raw[:-3].strip()
+            parsed = json.loads(raw)
+            reply_text = parsed.get("reply", "I'm here to help! What would you like to do?")
+            suggested_actions = parsed.get("suggested_actions", ["find_product", "show_cart"])
+        except Exception:
+            logger.exception("Gemini API call failed for customer_agent")
+            reply_text = "I'm having trouble right now. Please try again or ask store support for help."
+            suggested_actions = ["call_support"]
+
         self.service.record_message(
             store_id=store_id,
             session_id=session_id,
             customer_id=customer_id,
             role="agent",
             channel=channel,
-            message=reply,
+            message=reply_text,
         )
-        return reply, suggested_actions
-
-    def _cart_reply(self, session_id: str) -> str:
-        if not session_id:
-            return "Please scan the store QR or start a shopping session so I can show your cart."
-        lines, total = self.service.cart_summary(session_id)
-        if not lines:
-            return "Your cart is empty right now. Pick an item and I will add it automatically."
-        return "Your current cart:\n" + "\n".join(lines) + f"\nEstimated total: ₹{total:.2f}"
-
-    def _payment_reply(self, session_id: str) -> str:
-        sale = self.service.latest_sale(session_id) if session_id else None
-        if sale is None:
-            return "Your bill is not generated yet. Please checkout first, then I will show the UPI payment link."
-        if sale.payment_status == "paid":
-            return f"Payment is already confirmed for bill {sale.id}. Thank you for shopping."
-        return f"Please pay ₹{sale.total:.2f} using this UPI link: {sale.upi_payment_uri}"
-
-    def _receipt_reply(self, session_id: str) -> str:
-        sale = self.service.latest_sale(session_id) if session_id else None
-        if sale is None:
-            return "I cannot find a completed bill for this session yet."
-        return f"Receipt {sale.id}: total ₹{sale.total:.2f}, payment status: {sale.payment_status}."
-
-    def _product_reply(self, store_id: str, query: str) -> str:
-        if not query:
-            return "Tell me the product name you want to find. Example: find milk."
-        products = self.service.product_search(store_id, query)
-        if not products:
-            return f"I could not find {query}. You can ask store support or try another product name."
-        lines = [f"{p.name}: ₹{p.selling_price:.2f}, stock {p.stock_quantity:g} {p.unit}" for p in products]
-        return "I found these products:\n" + "\n".join(lines)
+        return reply_text, suggested_actions
