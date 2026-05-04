@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from autonomous_retail_os.api import agents, cart, checkout, events, products, sessions, stores
+from autonomous_retail_os.api import agents, cart, checkout, customers, events, products, sessions, stores
 from autonomous_retail_os.config import get_settings
 from autonomous_retail_os.database import init_db
 
@@ -16,6 +16,7 @@ def create_app() -> FastAPI:
     app.include_router(stores.router)
     app.include_router(products.router)
     app.include_router(sessions.router)
+    app.include_router(customers.router)
     app.include_router(events.router)
     app.include_router(cart.router)
     app.include_router(checkout.router)

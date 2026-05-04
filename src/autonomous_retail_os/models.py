@@ -89,6 +89,32 @@ class CustomerSession(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class Customer(Base):
+    __tablename__ = "customers"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: new_id("cust"))
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), default="")
+    phone: Mapped[str] = mapped_column(String(32), default="")
+    preferred_language: Mapped[str] = mapped_column(String(40), default="en")
+    upi_vpa: Mapped[str] = mapped_column(String(120), default="")
+    loyalty_points: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class CustomerMessage(Base):
+    __tablename__ = "customer_messages"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: new_id("msg"))
+    store_id: Mapped[str] = mapped_column(ForeignKey("stores.id"), nullable=False)
+    session_id: Mapped[str] = mapped_column(String, default="")
+    customer_id: Mapped[str] = mapped_column(String, default="")
+    role: Mapped[str] = mapped_column(String(24), nullable=False)
+    channel: Mapped[str] = mapped_column(String(40), default="in_store_chat")
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class CartItem(Base):
     __tablename__ = "cart_items"
 

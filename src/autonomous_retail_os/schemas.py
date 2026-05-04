@@ -106,3 +106,43 @@ class AgentDecisionRead(BaseModel):
     confidence: float
 
     model_config = {"from_attributes": True}
+
+class CustomerCreate(BaseModel):
+    store_id: str
+    name: str = ""
+    phone: str = ""
+    preferred_language: str = "en"
+    upi_vpa: str = ""
+
+
+class CustomerRead(CustomerCreate):
+    id: str
+    loyalty_points: int
+
+    model_config = {"from_attributes": True}
+
+
+class CustomerChatRequest(BaseModel):
+    store_id: str
+    session_id: str = ""
+    customer_id: str = ""
+    message: str
+    channel: str = "in_store_chat"
+
+
+class CustomerChatResponse(BaseModel):
+    reply: str
+    suggested_actions: list[str] = []
+
+
+class CustomerMessageRead(BaseModel):
+    id: str
+    store_id: str
+    session_id: str
+    customer_id: str
+    role: str
+    channel: str
+    message: str
+
+    model_config = {"from_attributes": True}
+
